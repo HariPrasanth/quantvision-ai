@@ -79,8 +79,8 @@ def train_xgboost_model(data, stock_symbol, update=False):
 
 # Function to make investment decision
 def make_investment_decision(sentiments, predictions, stock_symbol):
-    positive_count = sum(1 for sentiment in sentiments if sentiment['sentiment']['label'] == 'positive')
-    negative_count = sum(1 for sentiment in sentiments if sentiment['sentiment']['label'] == 'negative')
+    positive_count = sum(1 for sentiment in sentiments if sentiment['sentiment']['label'] == 'POSITIVE')
+    negative_count = sum(1 for sentiment in sentiments if sentiment['sentiment']['label'] == 'NEGATIVE')
 
     if predictions[-1] > 0.05 and positive_count > negative_count:
         if stock_symbol in st.session_state.portfolio and st.session_state.portfolio[stock_symbol] > 0:
