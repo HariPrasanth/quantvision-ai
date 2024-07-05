@@ -2,7 +2,6 @@ import streamlit as st
 import yfinance as yf
 import requests
 from transformers import pipeline
-from kiteconnect import KiteConnect
 import pandas as pd
 import numpy as np
 import xgboost as xgb
@@ -11,17 +10,12 @@ from sklearn.metrics import mean_squared_error
 from dotenv import load_dotenv
 import os
 import joblib
-from apscheduler.schedulers.background import BackgroundScheduler
-from datetime import datetime, timedelta
-import pytz
+import concurrent.futures
 
 # Load environment variables
 load_dotenv()
 
 NEWS_API_KEY = os.getenv('NEWS_API_KEY')
-# OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
-
-# openai.api_key = OPENAI_API_KEY
 
 MODEL_DIR = 'models'
 
@@ -38,14 +32,6 @@ def get_historical_data(stock_symbol):
 
 # Function to get news query by appending the word "stock"
 def get_news_query(stock_symbol):
-    # response = openai.ChatCompletion.create(
-    #     model="gpt-4o",
-    #     messages=[
-    #         {"role": "system", "content": "You are a helpful assistant."},
-    #         {"role": "user", "content": f"Generate a news query for stock symbol: {stock_symbol}"}
-    #     ]
-    # )
-    # query = response.choices[0]['message']['content'].strip()
     query = f"stock {stock_symbol}"
     return query
 
@@ -92,33 +78,24 @@ def train_xgboost_model(data, stock_symbol, update=False):
 
 
 # Function to make investment decision
-def make_investment_decision(sentiments, predictions, threshold=0.5):
+def make_investment_decision(sentiments, predictions, stock_symbol):
     positive_count = sum(1 for sentiment in sentiments if sentiment['sentiment']['label'] == 'positive')
     negative_count = sum(1 for sentiment in sentiments if sentiment['sentiment']['label'] == 'negative')
 
-    if predictions[-1] > threshold and positive_count > negative_count:
-        return "BUY"
-    elif predictions[-1] < -threshold and negative_count > positive_count:
-        return "SELL"
+    if predictions[-1] > 0.05 and positive_count > negative_count:
+        if stock_symbol in st.session_state.portfolio and st.session_state.portfolio[stock_symbol] > 0:
+            return "HOLD"  # Already bought, so hold
+        else:
+            return "BUY"  # Buy if not bought yet
+    elif predictions[-1] < -0.05 and negative_count > positive_count:
+        if stock_symbol in st.session_state.portfolio and st.session_state.portfolio[stock_symbol] > 10:
+            return "SELL PART"  # Sell a few quantities
+        elif stock_symbol in st.session_state.portfolio and st.session_state.portfolio[stock_symbol] > 0:
+            return "SELL ALL"  # Sell all quantities
+        else:
+            return "HOLD"  # Nothing to sell, so hold
     else:
         return "HOLD"
-
-
-# Function to place order using Zerodha Kite API
-def place_order(api_key, api_secret, access_token, stock_symbol, action):
-    kite = KiteConnect(api_key=api_key)
-    kite.set_access_token(access_token)
-    try:
-        if action == "BUY":
-            kite.place_order(tradingsymbol=stock_symbol, exchange='NSE', transaction_type='BUY', quantity=1,
-                             order_type='MARKET', product='CNC')
-        elif action == "SELL":
-            kite.place_order(tradingsymbol=stock_symbol, exchange='NSE', transaction_type='SELL', quantity=1,
-                             order_type='MARKET', product='CNC')
-        else:
-            st.write("HOLD - No action taken")
-    except Exception as e:
-        st.error(f"Error placing order: {e}")
 
 
 # Function to update the model and make predictions
@@ -126,7 +103,6 @@ def update_model_and_predict(stock_symbol):
     st.write(f"Fetching historical data for {stock_symbol}...")
     data = get_historical_data(stock_symbol)
     st.write("Historical data fetched.")
-    st.write(data)  # Display historical data
 
     st.write("Generating news query...")
     news_query = get_news_query(stock_symbol)
@@ -144,7 +120,7 @@ def update_model_and_predict(stock_symbol):
         # Displaying number of news articles and their sentiments
         sentiment_df = pd.DataFrame(sentiments)
         st.write("Sentiment results:")
-        st.write(sentiment_df)
+        st.dataframe(sentiment_df)
     else:
         st.write("No news articles received to analyze.")
         sentiments = []
@@ -155,59 +131,90 @@ def update_model_and_predict(stock_symbol):
 
     st.write("Making investment decision...")
     data['Prediction'] = model.predict(data[['Open', 'High', 'Low', 'Volume']])
-    decision = make_investment_decision(sentiments, data['Prediction'])
+    decision = make_investment_decision(sentiments, data['Prediction'], stock_symbol)
     st.write(f"Investment Decision: {decision}")
 
     return decision
 
 
-# Initialize session state for storing used stock symbols
+# Initialize session state for storing used stock symbols and portfolio
 if 'used_stock_symbols' not in st.session_state:
-    st.session_state.used_stock_symbols = []
+    st.session_state.used_stock_symbols = {}
+if 'portfolio' not in st.session_state:
+    st.session_state.portfolio = {}
 
 # Streamlit UI
+st.set_page_config(page_title="QuantVision.ai", page_icon="📈", layout="wide")
 st.title("QuantVision.ai - AI-Powered Investment Strategy")
+st.markdown("""
+<style>
+.sidebar .sidebar-content {
+    background-image: linear-gradient(#2e7bcf,#2e7bcf);
+    color: white;
+}
+</style>
+""", unsafe_allow_html=True)
 
 # Input for stock symbol
-stock_symbol = st.text_input("Enter Stock Symbol:")
+stock_symbol = st.sidebar.text_input("Enter Stock Symbol:")
 
 # Button to add stock symbol to the list
-if st.button("Add Stock Symbol"):
+if st.sidebar.button("Add Stock Symbol"):
     if stock_symbol and stock_symbol not in st.session_state.used_stock_symbols:
-        st.session_state.used_stock_symbols.append(stock_symbol)
-        st.write(f"Added {stock_symbol} to the list.")
+        st.session_state.used_stock_symbols[stock_symbol] = {'status': 'new'}
+        st.sidebar.success(f"Added {stock_symbol} to the list.")
     else:
-        st.write(f"{stock_symbol} is already in the list or invalid input.")
+        st.sidebar.error(f"{stock_symbol} is already in the list or invalid input.")
 
-# Display stored stock symbols
-st.write("Stored Stock Symbols:")
-st.write(st.session_state.used_stock_symbols)
-
-# Display the initial decision for each stored stock symbol when the app loads
-if st.session_state.used_stock_symbols:
-    for symbol in st.session_state.used_stock_symbols:
-        st.write(f"Fetching initial decision for {symbol}...")
-        initial_decision = update_model_and_predict(symbol)
-        st.write(f"Initial Investment Decision for {symbol}: {initial_decision}")
-
-# Button to manually update and make decision
-if st.button("Update and Make Decision"):
-    for symbol in st.session_state.used_stock_symbols:
-        decision = update_model_and_predict(symbol)
-        st.write(f"Investment Decision for {symbol}: {decision}")
+# Display stored stock symbols and provide an option to restart the process
+st.sidebar.header("Stored Stock Symbols")
+for symbol in st.session_state.used_stock_symbols.keys():
+    if st.sidebar.button(f"Restart Process for {symbol}"):
+        st.session_state.used_stock_symbols[symbol]['status'] = 'new'
 
 
-# Schedule the update_model_and_predict function to run at 6 AM IST every day
-def schedule_daily_update():
-    scheduler = BackgroundScheduler()
-    ist = pytz.timezone('Asia/Kolkata')
-    scheduled_time = datetime.now(ist).replace(hour=6, minute=0, second=0, microsecond=0)
-    if datetime.now(ist) > scheduled_time:
-        scheduled_time += timedelta(days=1)
-    for symbol in st.session_state.used_stock_symbols:
-        scheduler.add_job(update_model_and_predict, 'interval', days=1, start_date=scheduled_time, args=[symbol])
-    scheduler.start()
+# Function to run analysis for all stocks in parallel
+def run_analysis_for_all_stocks():
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        futures = {executor.submit(update_model_and_predict, symbol): symbol for symbol in
+                   st.session_state.used_stock_symbols.keys()}
+        for future in concurrent.futures.as_completed(futures):
+            symbol = futures[future]
+            try:
+                decision = future.result()
+                st.session_state.used_stock_symbols[symbol]['status'] = 'completed'
+                st.session_state.used_stock_symbols[symbol]['decision'] = decision
+                if decision == "BUY":
+                    st.session_state.portfolio[symbol] = st.session_state.portfolio.get(symbol,
+                                                                                        0) + 10  # Simulate buying 10 shares
+                elif decision == "SELL PART":
+                    st.session_state.portfolio[symbol] -= 5  # Simulate selling 5 shares
+                elif decision == "SELL ALL":
+                    st.session_state.portfolio[symbol] = 0  # Simulate selling all shares
+            except Exception as e:
+                st.session_state.used_stock_symbols[symbol]['status'] = 'failed'
+                st.session_state.used_stock_symbols[symbol]['error'] = str(e)
+                st.error(f"Error processing {symbol}: {e}")
 
 
-# Run the scheduling function
-schedule_daily_update()
+# Button to run analysis for all stocks
+if st.sidebar.button("Run Analysis for All Stocks"):
+    run_analysis_for_all_stocks()
+
+# Display results in the main area
+st.header("Analysis Results")
+for symbol, details in st.session_state.used_stock_symbols.items():
+    with st.expander(f"Results for {symbol}"):
+        st.write(f"Symbol: {symbol}")
+        if details['status'] == 'completed':
+            st.write(f"Decision: {details['decision']}")
+        elif details['status'] == 'failed':
+            st.write(f"Error: {details['error']}")
+        else:
+            st.write("Status: Pending")
+
+        # Display portfolio information
+        if symbol in st.session_state.portfolio:
+            st.write(f"Shares owned: {st.session_state.portfolio[symbol]}")
+        else:
+            st.write("No shares owned")
