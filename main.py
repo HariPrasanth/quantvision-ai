@@ -8,7 +8,6 @@ import numpy as np
 import xgboost as xgb
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
-from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from dotenv import load_dotenv
 import os
 import tensorflow as tf
@@ -88,25 +87,18 @@ def place_order(api_key, api_secret, access_token, stock_symbol, action):
 st.title("QuantVision.ai - AI-Powered Investment Strategy")
 
 stock_symbol = st.text_input("Enter Stock Symbol:")
-if st.button("Get Data"):
+if st.button("Analyze and Make Decision"):
     data = get_historical_data(stock_symbol)
-    st.write(data)
-
-if st.button("Get News and Analyze Sentiment"):
     news_data = get_news(NEWS_API_KEY, stock_symbol)
-    st.write(news_data)
     sentiments = analyze_sentiment_transformers(news_data)
-    st.write(sentiments)
+    model, rmse = train_xgboost_model(data)
+    st.write(f"Model RMSE: {rmse}")
+    data['Prediction'] = model.predict(data[['Open', 'High', 'Low', 'Volume']])
+    decision = make_investment_decision(sentiments, data['Prediction'])
+    st.write(f"Decision: {decision}")
 
-    if st.button("Make Decision"):
-        model, rmse = train_xgboost_model(data)
-        st.write(f"Model RMSE: {rmse}")
-        data['Prediction'] = model.predict(data[['Open', 'High', 'Low', 'Volume']])
-        decision = make_investment_decision(sentiments, data['Prediction'])
-        st.write(f"Decision: {decision}")
-
-        if decision in ["BUY", "SELL", "HOLD"]:
-            zerodha_api_key = st.text_input("Enter Zerodha API Key:")
-            zerodha_api_secret = st.text_input("Enter Zerodha API Secret:")
-            zerodha_access_token = st.text_input("Enter Zerodha Access Token:")
-            place_order(zerodha_api_key, zerodha_api_secret, zerodha_access_token, stock_symbol, decision)
+    if decision in ["BUY", "SELL", "HOLD"]:
+        zerodha_api_key = st.text_input("Enter Zerodha API Key:")
+        zerodha_api_secret = st.text_input("Enter Zerodha API Secret:")
+        zerodha_access_token = st.text_input("Enter Zerodha Access Token:")
+        place_order(zerodha_api_key, zerodha_api_secret, zerodha_access_token, stock_symbol, decision)
