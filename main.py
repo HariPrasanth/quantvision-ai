@@ -176,6 +176,7 @@ button.small-button {
     border-radius: 0.2em;
     cursor: pointer;
     display: inline-block;
+    margin-left: 5px;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -201,10 +202,8 @@ for symbol in list(st.session_state.used_stock_symbols.keys()):
             st.session_state.used_stock_symbols[symbol]['status'] = 'new'
             st.experimental_rerun()
     with col2:
-        if st.button("", key=f"delete_{symbol}", help="Delete", args=(symbol,),
-                     on_click=lambda s=symbol: delete_stock(s)):
-            del st.session_state.used_stock_symbols[symbol]
-            st.experimental_rerun()
+        delete_button = f'<button class="small-button" onclick="delete_stock(\'{symbol}\')">del</button>'
+        st.markdown(delete_button, unsafe_allow_html=True)
     with col3:
         st.write(st.session_state.used_stock_symbols[symbol]['exchange'])
 
