@@ -10,7 +10,6 @@ from sklearn.metrics import mean_squared_error
 from dotenv import load_dotenv
 import os
 import joblib
-import concurrent.futures
 
 # Load environment variables
 load_dotenv()
@@ -99,40 +98,46 @@ def make_investment_decision(sentiments, predictions, stock_symbol):
 
 
 # Function to update the model and make predictions
-def update_model_and_predict(stock_symbol, placeholder):
-    placeholder.write(f"Fetching historical data for {stock_symbol}...")
+def update_model_and_predict(stock_symbol):
+    progress_text = st.empty()
+    progress_bar = st.progress(0)
+
+    progress_text.text(f"Fetching historical data for {stock_symbol}...")
     data = get_historical_data(stock_symbol)
-    placeholder.write("Historical data fetched.")
+    progress_bar.progress(10)
 
-    placeholder.write("Generating news query...")
+    progress_text.text(f"Generating news query for {stock_symbol}...")
     news_query = get_news_query(stock_symbol)
-    placeholder.write(f"News query generated: {news_query}")
+    progress_bar.progress(20)
 
-    placeholder.write("Fetching news...")
+    progress_text.text(f"Fetching news for {stock_symbol}...")
     articles = get_news(NEWS_API_KEY, news_query)
-    placeholder.write(f"Number of news articles received: {len(articles)}")
+    progress_bar.progress(30)
 
     if articles:
-        placeholder.write("Analyzing sentiment of news articles...")
+        progress_text.text(f"Analyzing sentiment of news articles for {stock_symbol}...")
         sentiments = analyze_sentiment_transformers(articles)
-        placeholder.write("Sentiment analysis completed.")
+        progress_bar.progress(50)
 
         # Displaying number of news articles and their sentiments
         sentiment_df = pd.DataFrame(sentiments)
-        placeholder.write("Sentiment results:")
-        placeholder.dataframe(sentiment_df)
+        progress_text.text(f"Sentiment results for {stock_symbol}:")
+        st.dataframe(sentiment_df)
     else:
-        placeholder.write("No news articles received to analyze.")
+        progress_text.text(f"No news articles received to analyze for {stock_symbol}.")
         sentiments = []
+        progress_bar.progress(50)
 
-    placeholder.write("Training or updating model...")
+    progress_text.text(f"Training or updating model for {stock_symbol}...")
     model, rmse = train_xgboost_model(data, stock_symbol, update=True)
-    placeholder.write(f"Model trained or updated. RMSE: {rmse}")
+    progress_text.text(f"Model trained or updated for {stock_symbol}. RMSE: {rmse}")
+    progress_bar.progress(70)
 
-    placeholder.write("Making investment decision...")
+    progress_text.text(f"Making investment decision for {stock_symbol}...")
     data['Prediction'] = model.predict(data[['Open', 'High', 'Low', 'Volume']])
     decision = make_investment_decision(sentiments, data['Prediction'], stock_symbol)
-    placeholder.write(f"Investment Decision: {decision}")
+    progress_text.text(f"Investment Decision for {stock_symbol}: {decision}")
+    progress_bar.progress(100)
 
     return decision
 
@@ -173,38 +178,29 @@ for symbol in list(st.session_state.used_stock_symbols.keys()):
         st.session_state.used_stock_symbols[symbol]['status'] = 'new'
 
 
-# Function to run analysis for all stocks in parallel with progress tracking
+# Function to run analysis for all stocks sequentially with progress tracking
 def run_analysis_for_all_stocks():
     total_stocks = len(st.session_state.used_stock_symbols)
     progress_bar = st.progress(0)
     progress_increment = 1 / total_stocks
 
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        futures = {}
-        placeholders = {symbol: st.empty() for symbol in st.session_state.used_stock_symbols.keys()}
-        for symbol in st.session_state.used_stock_symbols.keys():
-            futures[executor.submit(update_model_and_predict, symbol, placeholders[symbol])] = symbol
-
-        completed = 0
-        for future in concurrent.futures.as_completed(futures):
-            symbol = futures[future]
-            try:
-                decision = future.result()
-                st.session_state.used_stock_symbols[symbol]['status'] = 'completed'
-                st.session_state.used_stock_symbols[symbol]['decision'] = decision
-                if decision == "BUY":
-                    st.session_state.portfolio[symbol] = st.session_state.portfolio.get(symbol,
-                                                                                        0) + 10  # Simulate buying 10 shares
-                elif decision == "SELL PART":
-                    st.session_state.portfolio[symbol] -= 5  # Simulate selling 5 shares
-                elif decision == "SELL ALL":
-                    st.session_state.portfolio[symbol] = 0  # Simulate selling all shares
-            except Exception as e:
-                st.session_state.used_stock_symbols[symbol]['status'] = 'failed'
-                st.session_state.used_stock_symbols[symbol]['error'] = str(e)
-                st.error(f"Error processing {symbol}: {e}")
-            completed += 1
-            progress_bar.progress(min(completed * progress_increment, 1.0))
+    for idx, symbol in enumerate(st.session_state.used_stock_symbols.keys()):
+        try:
+            decision = update_model_and_predict(symbol)
+            st.session_state.used_stock_symbols[symbol]['status'] = 'completed'
+            st.session_state.used_stock_symbols[symbol]['decision'] = decision
+            if decision == "BUY":
+                st.session_state.portfolio[symbol] = st.session_state.portfolio.get(symbol,
+                                                                                    0) + 10  # Simulate buying 10 shares
+            elif decision == "SELL PART":
+                st.session_state.portfolio[symbol] -= 5  # Simulate selling 5 shares
+            elif decision == "SELL ALL":
+                st.session_state.portfolio[symbol] = 0  # Simulate selling all shares
+        except Exception as e:
+            st.session_state.used_stock_symbols[symbol]['status'] = 'failed'
+            st.session_state.used_stock_symbols[symbol]['error'] = str(e)
+            st.error(f"Error processing {symbol}: {e}")
+        progress_bar.progress(min((idx + 1) * progress_increment, 1.0))
 
 
 # Button to run analysis for all stocks
@@ -220,4 +216,11 @@ for symbol, details in st.session_state.used_stock_symbols.items():
             st.write(f"Decision: {details['decision']}")
         elif details['status'] == 'failed':
             st.write(f"Error: {details['error']}")
-            
+        else:
+            st.write("Status: Pending")
+
+        # Display portfolio information
+        if symbol in st.session_state.portfolio:
+            st.write(f"Shares owned: {st.session_state.portfolio[symbol]}")
+        else
+            st.write(f"Shares not owned: {st.session_state.portfolio[symbol]}")
