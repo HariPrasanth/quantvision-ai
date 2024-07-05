@@ -223,4 +223,4 @@ for symbol, details in st.session_state.used_stock_symbols.items():
         if symbol in st.session_state.portfolio:
             st.write(f"Shares owned: {st.session_state.portfolio[symbol]}")
         else:
-            st.write(f"Shares not owned: {st.session_state.portfolio[symbol]}")
+            st.write(f"Shares not owned:")
