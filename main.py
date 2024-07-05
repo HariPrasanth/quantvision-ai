@@ -79,8 +79,8 @@ def train_xgboost_model(data, stock_symbol, update=False):
 
 # Function to make investment decision
 def make_investment_decision(sentiments, predictions, stock_symbol):
-    positive_count = sum(1 for sentiment in sentiments if sentiment['sentiment']['label'] == 'POSITIVE')
-    negative_count = sum(1 for sentiment in sentiments if sentiment['sentiment']['label'] == 'NEGATIVE')
+    positive_count = sum(1 for sentiment in sentiments if sentiment['sentiment']['label'] == 'positive')
+    negative_count = sum(1 for sentiment in sentiments if sentiment['sentiment']['label'] == 'negative')
 
     if predictions[-1] > 0.05 and positive_count > negative_count:
         if stock_symbol in st.session_state.portfolio and st.session_state.portfolio[stock_symbol] > 0:
@@ -99,7 +99,7 @@ def make_investment_decision(sentiments, predictions, stock_symbol):
 
 
 # Function to update the model and make predictions
-def update_model_and_predict(stock_symbol):
+def update_model_and_predict(stock_symbol, progress_bar, progress_value):
     st.write(f"Fetching historical data for {stock_symbol}...")
     data = get_historical_data(stock_symbol)
     st.write("Historical data fetched.")
@@ -134,6 +134,7 @@ def update_model_and_predict(stock_symbol):
     decision = make_investment_decision(sentiments, data['Prediction'], stock_symbol)
     st.write(f"Investment Decision: {decision}")
 
+    progress_bar.progress(progress_value + 1)
     return decision
 
 
@@ -168,16 +169,18 @@ if st.sidebar.button("Add Stock Symbol"):
 
 # Display stored stock symbols and provide an option to restart the process
 st.sidebar.header("Stored Stock Symbols")
-for symbol in st.session_state.used_stock_symbols.keys():
+for symbol in list(st.session_state.used_stock_symbols.keys()):
     if st.sidebar.button(f"Restart Process for {symbol}"):
         st.session_state.used_stock_symbols[symbol]['status'] = 'new'
 
 
-# Function to run analysis for all stocks in parallel
+# Function to run analysis for all stocks in parallel with progress tracking
 def run_analysis_for_all_stocks():
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        futures = {executor.submit(update_model_and_predict, symbol): symbol for symbol in
-                   st.session_state.used_stock_symbols.keys()}
+    total_stocks = len(st.session_state.used_stock_symbols)
+    progress_bar = st.progress(0)
+
+    def update_progress(futures):
+        completed = 0
         for future in concurrent.futures.as_completed(futures):
             symbol = futures[future]
             try:
@@ -195,6 +198,13 @@ def run_analysis_for_all_stocks():
                 st.session_state.used_stock_symbols[symbol]['status'] = 'failed'
                 st.session_state.used_stock_symbols[symbol]['error'] = str(e)
                 st.error(f"Error processing {symbol}: {e}")
+            completed += 1
+            progress_bar.progress(completed / total_stocks)
+
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        futures = {executor.submit(update_model_and_predict, symbol, progress_bar, idx): symbol for idx, symbol in
+                   enumerate(st.session_state.used_stock_symbols.keys())}
+        update_progress(futures)
 
 
 # Button to run analysis for all stocks
@@ -216,5 +226,3 @@ for symbol, details in st.session_state.used_stock_symbols.items():
         # Display portfolio information
         if symbol in st.session_state.portfolio:
             st.write(f"Shares owned: {st.session_state.portfolio[symbol]}")
-        else:
-            st.write("No shares owned")
