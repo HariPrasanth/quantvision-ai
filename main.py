@@ -26,8 +26,11 @@ if not os.path.exists(MODEL_DIR):
 
 
 # Function to get historical data
-def get_historical_data(stock_symbol):
-    stock_symbol = stock_symbol + ".NS"  # For Indian stocks listed on NSE
+def get_historical_data(stock_symbol, exchange):
+    if exchange == "NSE":
+        stock_symbol = stock_symbol + ".NS"
+    elif exchange == "BSE":
+        stock_symbol = stock_symbol + ".BO"
     data = yf.download(stock_symbol, start="2020-01-01", end="2024-01-01")
     return data
 
@@ -104,12 +107,12 @@ def make_investment_decision(sentiments, predictions, stock_symbol):
 
 
 # Function to update the model and make predictions
-def update_model_and_predict(stock_symbol):
+def update_model_and_predict(stock_symbol, exchange):
     progress_text = st.empty()
     progress_bar = st.progress(0)
 
-    progress_text.text(f"Fetching historical data for {stock_symbol}...")
-    data = get_historical_data(stock_symbol)
+    progress_text.text(f"Fetching historical data for {stock_symbol} on {exchange}...")
+    data = get_historical_data(stock_symbol, exchange)
     progress_bar.progress(10)
 
     progress_text.text(f"Generating news query for {stock_symbol}...")
@@ -168,11 +171,12 @@ st.markdown("""
 
 # Input for stock symbol
 stock_symbol = st.sidebar.text_input("Enter Stock Symbol:")
+exchange = st.sidebar.selectbox("Select Exchange:", ["NSE", "BSE"])
 
 # Button to add stock symbol to the list
 if st.sidebar.button("Add Stock Symbol"):
     if stock_symbol and stock_symbol not in st.session_state.used_stock_symbols:
-        st.session_state.used_stock_symbols[stock_symbol] = {'status': 'new'}
+        st.session_state.used_stock_symbols[stock_symbol] = {'status': 'new', 'exchange': exchange}
         st.sidebar.success(f"Added {stock_symbol} to the list.")
     else:
         st.sidebar.error(f"{stock_symbol} is already in the list or invalid input.")
@@ -180,7 +184,7 @@ if st.sidebar.button("Add Stock Symbol"):
 # Display stored stock symbols and provide options to restart or delete the process
 st.sidebar.header("Stored Stock Symbols")
 for symbol in list(st.session_state.used_stock_symbols.keys()):
-    col1, col2 = st.sidebar.columns([3, 1])
+    col1, col2, col3 = st.sidebar.columns([2, 1, 1])
     with col1:
         if st.sidebar.button(f"Restart {symbol}"):
             st.session_state.used_stock_symbols[symbol]['status'] = 'new'
@@ -188,6 +192,8 @@ for symbol in list(st.session_state.used_stock_symbols.keys()):
         if st.sidebar.button(f"Delete {symbol}"):
             del st.session_state.used_stock_symbols[symbol]
             st.experimental_rerun()
+    with col3:
+        st.sidebar.text(st.session_state.used_stock_symbols[symbol]['exchange'])
 
 
 # Function to run analysis for all stocks sequentially with progress tracking
@@ -198,7 +204,8 @@ def run_analysis_for_all_stocks():
 
     for idx, symbol in enumerate(st.session_state.used_stock_symbols.keys()):
         try:
-            decision = update_model_and_predict(symbol)
+            exchange = st.session_state.used_stock_symbols[symbol]['exchange']
+            decision = update_model_and_predict(symbol, exchange)
             st.session_state.used_stock_symbols[symbol]['status'] = 'completed'
             st.session_state.used_stock_symbols[symbol]['decision'] = decision
             if decision == "BUY":
