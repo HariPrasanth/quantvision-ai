@@ -1,7 +1,7 @@
-streamlit==1.34.0
-yfinance==0.2.4
-requests==2.32.2
-transformers==4.30.2
-kiteconnect==5.0.1
-numpy==2.0.0
-pandas==1.4.2
+streamlit
+yfinance
+requests
+transformers
+kiteconnect
+numpy
+pandas
