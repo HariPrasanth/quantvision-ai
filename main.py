@@ -10,11 +10,14 @@ from sklearn.metrics import mean_squared_error
 from dotenv import load_dotenv
 import os
 import joblib
+import openai
 
 # Load environment variables
 load_dotenv()
 
 NEWS_API_KEY = os.getenv('NEWS_API_KEY')
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+openai.api_key = OPENAI_API_KEY
 
 MODEL_DIR = 'models'
 
@@ -46,11 +49,14 @@ def get_news(api_key, query):
     return []
 
 
-# Function to analyze sentiment using transformers
-def analyze_sentiment_transformers(articles):
-    sentiment_analysis = pipeline('sentiment-analysis')
-    sentiments = [{'title': article['title'], 'sentiment': sentiment_analysis(article['title'])[0]} for article in
-                  articles]
+# Function to analyze sentiment using GPT-4
+def analyze_sentiment_gpt4(articles):
+    sentiments = []
+    for article in articles:
+        prompt = f"Analyze the sentiment of the following news headline: {article['title']}. Provide the sentiment as positive, negative, or neutral."
+        response = openai.Completion.create(engine="text-davinci-003", prompt=prompt, max_tokens=10)
+        sentiment = response.choices[0].text.strip()
+        sentiments.append({'title': article['title'], 'sentiment': sentiment})
     return sentiments
 
 
@@ -78,8 +84,8 @@ def train_xgboost_model(data, stock_symbol, update=False):
 
 # Function to make investment decision
 def make_investment_decision(sentiments, predictions, stock_symbol):
-    positive_count = sum(1 for sentiment in sentiments if sentiment['sentiment']['label'] == 'positive')
-    negative_count = sum(1 for sentiment in sentiments if sentiment['sentiment']['label'] == 'negative')
+    positive_count = sum(1 for sentiment in sentiments if sentiment['sentiment'] == 'positive')
+    negative_count = sum(1 for sentiment in sentiments if sentiment['sentiment'] == 'negative')
 
     if predictions[-1] > 0.05 and positive_count > negative_count:
         if stock_symbol in st.session_state.portfolio and st.session_state.portfolio[stock_symbol] > 0:
@@ -115,8 +121,8 @@ def update_model_and_predict(stock_symbol):
     progress_bar.progress(30)
 
     if articles:
-        progress_text.text(f"Analyzing sentiment of news articles for {stock_symbol}...")
-        sentiments = analyze_sentiment_transformers(articles)
+        progress_text.text(f"Analyzing sentiment of news articles for {stock_symbol} using GPT-4...")
+        sentiments = analyze_sentiment_gpt4(articles)
         progress_bar.progress(50)
 
         # Displaying number of news articles and their sentiments
@@ -222,5 +228,3 @@ for symbol, details in st.session_state.used_stock_symbols.items():
         # Display portfolio information
         if symbol in st.session_state.portfolio:
             st.write(f"Shares owned: {st.session_state.portfolio[symbol]}")
-        else:
-            st.write(f"Shares not owned:")
