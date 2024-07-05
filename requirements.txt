@@ -12,3 +12,4 @@ matplotlib
 seaborn
 vaderSentiment
 python-dotenv
+tensorflow

@@ -11,6 +11,7 @@ from sklearn.metrics import mean_squared_error
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from dotenv import load_dotenv
 import os
+import tensorflow as tf
 
 # Load environment variables
 load_dotenv()
