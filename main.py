@@ -235,14 +235,6 @@ def run_analysis_for_all_stocks():
 
 
 # Button to run analysis for all stocks
-
-
-
-
-n
-
-
-
 if st.sidebar.button("Run Analysis for All Stocks"):
     run_analysis_for_all_stocks()
 
