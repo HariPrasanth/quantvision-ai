@@ -33,12 +33,14 @@ def get_historical_data(stock_symbol):
 
 # Function to get news query using OpenAI GPT-4
 def get_news_query(stock_symbol):
-    response = openai.Completion.create(
-        engine="gpt-4",
-        prompt=f"Generate a news query for stock symbol: {stock_symbol}",
-        max_tokens=20
+    response = openai.ChatCompletion.create(
+        model="gpt-4",
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": f"Generate a news query for stock symbol: {stock_symbol}"}
+        ]
     )
-    query = response.choices[0].text.strip()
+    query = response['choices'][0]['message']['content'].strip()
     return query
 
 
