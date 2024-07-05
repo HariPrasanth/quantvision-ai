@@ -31,6 +31,7 @@ def get_historical_data(stock_symbol, exchange):
         stock_symbol = stock_symbol + ".NS"
     elif exchange == "BSE":
         stock_symbol = stock_symbol + ".BO"
+    # US stocks do not require an exchange suffix
     data = yf.download(stock_symbol, start="2020-01-01", end="2024-01-01")
     return data
 
@@ -57,7 +58,7 @@ def analyze_sentiment_gpt4(articles):
     sentiments = []
     for article in articles:
         prompt = f"Analyze the sentiment of the following news headline: {article['title']}. Provide the sentiment as positive, negative, or neutral."
-        response = openai.Completion.create(engine="gpt-4o", prompt=prompt, max_tokens=200)
+        response = openai.Completion.create(engine="text-davinci-003", prompt=prompt, max_tokens=10)
         sentiment = response.choices[0].text.strip()
         sentiments.append({'title': article['title'], 'sentiment': sentiment})
     return sentiments
@@ -166,12 +167,22 @@ st.markdown("""
     background-image: linear-gradient(#2e7bcf,#2e7bcf);
     color: white;
 }
+button.small-button {
+    padding: 0.2em 0.6em;
+    font-size: 0.8em;
+    color: white;
+    background-color: red;
+    border: none;
+    border-radius: 0.2em;
+    cursor: pointer;
+    display: inline-block;
+}
 </style>
 """, unsafe_allow_html=True)
 
 # Input for stock symbol
 stock_symbol = st.sidebar.text_input("Enter Stock Symbol:")
-exchange = st.sidebar.selectbox("Select Exchange:", ["NSE", "BSE"])
+exchange = st.sidebar.selectbox("Select Exchange:", ["NSE", "BSE", "US"])
 
 # Button to add stock symbol to the list
 if st.sidebar.button("Add Stock Symbol"):
@@ -186,14 +197,16 @@ st.sidebar.header("Stored Stock Symbols")
 for symbol in list(st.session_state.used_stock_symbols.keys()):
     col1, col2, col3 = st.sidebar.columns([2, 1, 1])
     with col1:
-        if st.sidebar.button(f"Restart {symbol}"):
+        if st.button(f"Restart {symbol}"):
             st.session_state.used_stock_symbols[symbol]['status'] = 'new'
+            st.experimental_rerun()
     with col2:
-        if st.sidebar.button(f"Delete {symbol}"):
+        if st.button("", key=f"delete_{symbol}", help="Delete", args=(symbol,),
+                     on_click=lambda s=symbol: delete_stock(s)):
             del st.session_state.used_stock_symbols[symbol]
             st.experimental_rerun()
     with col3:
-        st.sidebar.text(st.session_state.used_stock_symbols[symbol]['exchange'])
+        st.write(st.session_state.used_stock_symbols[symbol]['exchange'])
 
 
 # Function to run analysis for all stocks sequentially with progress tracking
