@@ -58,8 +58,14 @@ def analyze_sentiment_gpt4(articles):
     sentiments = []
     for article in articles:
         prompt = f"Analyze the sentiment of the following news headline: {article['title']}. Provide the sentiment as positive, negative, or neutral."
-        response = openai.Completion.create(engine="gpt-4o", prompt=prompt, max_tokens=10)
-        sentiment = response.choices[0].text.strip()
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": prompt}
+            ]
+        )
+        sentiment = response['choices'][0]['message']['content'].strip()
         sentiments.append({'title': article['title'], 'sentiment': sentiment})
     return sentiments
 
