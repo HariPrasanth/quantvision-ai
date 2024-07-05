@@ -88,14 +88,23 @@ st.title("QuantVision.ai - AI-Powered Investment Strategy")
 
 stock_symbol = st.text_input("Enter Stock Symbol:")
 if st.button("Analyze and Make Decision"):
+    st.write("Fetching historical data...")
     data = get_historical_data(stock_symbol)
+    st.write("Historical data fetched.")
+
+    st.write("Fetching news and analyzing sentiment...")
     news_data = get_news(NEWS_API_KEY, stock_symbol)
     sentiments = analyze_sentiment_transformers(news_data)
+    st.write("Sentiment analysis completed.")
+
+    st.write("Training model...")
     model, rmse = train_xgboost_model(data)
-    st.write(f"Model RMSE: {rmse}")
+    st.write(f"Model trained. RMSE: {rmse}")
+
+    st.write("Making investment decision...")
     data['Prediction'] = model.predict(data[['Open', 'High', 'Low', 'Volume']])
     decision = make_investment_decision(sentiments, data['Prediction'])
-    st.write(f"Decision: {decision}")
+    st.write(f"Investment Decision: {decision}")
 
     if decision in ["BUY", "SELL", "HOLD"]:
         zerodha_api_key = st.text_input("Enter Zerodha API Key:")
