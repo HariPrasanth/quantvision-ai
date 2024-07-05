@@ -5,3 +5,9 @@ transformers
 kiteconnect
 numpy
 pandas
+xgboost
+scikit-learn
+statsmodels
+matplotlib
+seaborn
+vaderSentiment

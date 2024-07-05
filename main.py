@@ -3,7 +3,12 @@ import yfinance as yf
 import requests
 from transformers import pipeline
 from kiteconnect import KiteConnect
+import pandas as pd
 import numpy as np
+import xgboost as xgb
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
 
 # Function to get historical data
@@ -20,28 +25,42 @@ def get_news(api_key, query):
     return news_data
 
 
-# Function to analyze sentiment
-sentiment_analysis = pipeline('sentiment-analysis')
-
-
-def analyze_sentiment(news_data):
+# Function to analyze sentiment using transformers
+def analyze_sentiment_transformers(news_data):
+    sentiment_analysis = pipeline('sentiment-analysis')
     sentiments = [sentiment_analysis(article['title'])[0] for article in news_data['articles']]
     return sentiments
 
 
-# Simple moving average based decision model
-def simple_moving_average(data, window_size):
-    return data.rolling(window=window_size).mean()
+# Function to analyze sentiment using VADER
+def analyze_sentiment_vader(news_data):
+    analyzer = SentimentIntensityAnalyzer()
+    sentiments = [analyzer.polarity_scores(article['title']) for article in news_data['articles']]
+    return sentiments
+
+
+# Function to train an XGBoost model
+def train_xgboost_model(data):
+    data['Return'] = data['Close'].pct_change()
+    data.dropna(inplace=True)
+    X = data[['Open', 'High', 'Low', 'Volume']]
+    y = data['Return']
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    model = xgb.XGBRegressor(objective='reg:squarederror', n_estimators=1000, learning_rate=0.05)
+    model.fit(X_train, y_train)
+    predictions = model.predict(X_test)
+    rmse = np.sqrt(mean_squared_error(y_test, predictions))
+    return model, rmse
 
 
 # Function to make investment decision
-def make_investment_decision(sentiments, sma_short, sma_long):
-    positive_count = sum(1 for sentiment in sentiments if sentiment['label'] == 'positive')
-    negative_count = sum(1 for sentiment in sentiments if sentiment['label'] == 'negative')
+def make_investment_decision(sentiments, predictions, threshold=0.5):
+    positive_count = sum(1 for sentiment in sentiments if sentiment['compound'] > 0.05)
+    negative_count = sum(1 for sentiment in sentiments if sentiment['compound'] < -0.05)
 
-    if sma_short.iloc[-1] > sma_long.iloc[-1] and positive_count > negative_count:
+    if predictions[-1] > threshold and positive_count > negative_count:
         return "BUY"
-    elif sma_short.iloc[-1] < sma_long.iloc[-1] and negative_count > positive_count:
+    elif predictions[-1] < -threshold and negative_count > positive_count:
         return "SELL"
     else:
         return "HOLD"
@@ -65,7 +84,7 @@ def place_order(api_key, api_secret, access_token, stock_symbol, action):
 
 
 # Streamlit UI
-st.title("AI-Powered Investment Strategy")
+st.title("QuantVision.ai - AI-Powered Investment Strategy")
 
 stock_symbol = st.text_input("Enter Stock Symbol:")
 if st.button("Get Data"):
@@ -78,14 +97,19 @@ if st.button("Get News"):
     st.write(news_data)
 
 if st.button("Analyze Sentiment"):
-    sentiments = analyze_sentiment(news_data)
+    sentiment_method = st.selectbox("Choose Sentiment Analysis Method", ["Transformers", "VADER"])
+    if sentiment_method == "Transformers":
+        sentiments = analyze_sentiment_transformers(news_data)
+    else:
+        sentiments = analyze_sentiment_vader(news_data)
     st.write(sentiments)
 
 if st.button("Make Decision"):
     data = get_historical_data(stock_symbol)
-    sma_short = simple_moving_average(data['Close'], window_size=50)
-    sma_long = simple_moving_average(data['Close'], window_size=200)
-    decision = make_investment_decision(sentiments, sma_short, sma_long)
+    model, rmse = train_xgboost_model(data)
+    st.write(f"Model RMSE: {rmse}")
+    data['Prediction'] = model.predict(data[['Open', 'High', 'Low', 'Volume']])
+    decision = make_investment_decision(sentiments, data['Prediction'])
     st.write(f"Decision: {decision}")
 
     if decision in ["BUY", "SELL", "HOLD"]:
