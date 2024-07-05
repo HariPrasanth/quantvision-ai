@@ -10,8 +10,6 @@ from sklearn.metrics import mean_squared_error
 from dotenv import load_dotenv
 import os
 import joblib
-import concurrent.futures
-from tqdm import tqdm
 
 # Load environment variables
 load_dotenv()
@@ -174,38 +172,29 @@ for symbol in list(st.session_state.used_stock_symbols.keys()):
         st.session_state.used_stock_symbols[symbol]['status'] = 'new'
 
 
-# Function to run analysis for all stocks in parallel with progress tracking
+# Function to run analysis for all stocks sequentially with progress tracking
 def run_analysis_for_all_stocks():
     total_stocks = len(st.session_state.used_stock_symbols)
     progress_bar = st.progress(0)
-    progress_increment = 100 / total_stocks
+    progress_increment = 1 / total_stocks
 
-    def update_progress(futures):
-        completed = 0
-        for future in concurrent.futures.as_completed(futures):
-            symbol = futures[future]
-            try:
-                decision = future.result()
-                st.session_state.used_stock_symbols[symbol]['status'] = 'completed'
-                st.session_state.used_stock_symbols[symbol]['decision'] = decision
-                if decision == "BUY":
-                    st.session_state.portfolio[symbol] = st.session_state.portfolio.get(symbol,
-                                                                                        0) + 10  # Simulate buying 10 shares
-                elif decision == "SELL PART":
-                    st.session_state.portfolio[symbol] -= 5  # Simulate selling 5 shares
-                elif decision == "SELL ALL":
-                    st.session_state.portfolio[symbol] = 0  # Simulate selling all shares
-            except Exception as e:
-                st.session_state.used_stock_symbols[symbol]['status'] = 'failed'
-                st.session_state.used_stock_symbols[symbol]['error'] = str(e)
-                st.error(f"Error processing {symbol}: {e}")
-            completed += 1
-            progress_bar.progress(min(completed * progress_increment, 100))
-
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        futures = {executor.submit(update_model_and_predict, symbol): symbol for symbol in
-                   st.session_state.used_stock_symbols.keys()}
-        update_progress(futures)
+    for idx, symbol in enumerate(st.session_state.used_stock_symbols.keys()):
+        try:
+            decision = update_model_and_predict(symbol)
+            st.session_state.used_stock_symbols[symbol]['status'] = 'completed'
+            st.session_state.used_stock_symbols[symbol]['decision'] = decision
+            if decision == "BUY":
+                st.session_state.portfolio[symbol] = st.session_state.portfolio.get(symbol,
+                                                                                    0) + 10  # Simulate buying 10 shares
+            elif decision == "SELL PART":
+                st.session_state.portfolio[symbol] -= 5  # Simulate selling 5 shares
+            elif decision == "SELL ALL":
+                st.session_state.portfolio[symbol] = 0  # Simulate selling all shares
+        except Exception as e:
+            st.session_state.used_stock_symbols[symbol]['status'] = 'failed'
+            st.session_state.used_stock_symbols[symbol]['error'] = str(e)
+            st.error(f"Error processing {symbol}: {e}")
+        progress_bar.progress(min((idx + 1) * progress_increment, 1.0))
 
 
 # Button to run analysis for all stocks
@@ -220,5 +209,12 @@ for symbol, details in st.session_state.used_stock_symbols.items():
         if details['status'] == 'completed':
             st.write(f"Decision: {details['decision']}")
         elif details['status'] == 'failed':
-            st.write(
-                f"ErrorThe error Thread 'ThreadPoolExecutor-1_0': missing ScriptRunContext` typically occurs because Streamlit does not support accessing its context from multiple threads directly. To work around this, you can update the progress in a way that is compatible with Streamlit’s single-threaded execution model.")
+            st.write(f"Error: {details['error']}")
+        else:
+            st.write("Status: Pending")
+
+        # Display portfolio information
+        if symbol in st.session_state.portfolio:
+            st.write(f"Shares owned: {st.session_state.portfolio[symbol]}")
+        else:
+            st.write("No shares owned")
