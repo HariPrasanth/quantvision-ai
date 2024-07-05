@@ -14,5 +14,5 @@ vaderSentiment
 python-dotenv
 tensorflow
 tf-keras
-openai
+openai==0.28
 joblib
