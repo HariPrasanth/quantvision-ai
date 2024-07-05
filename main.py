@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 import os
 import joblib
 import concurrent.futures
+from tqdm import tqdm
 
 # Load environment variables
 load_dotenv()
@@ -99,7 +100,7 @@ def make_investment_decision(sentiments, predictions, stock_symbol):
 
 
 # Function to update the model and make predictions
-def update_model_and_predict(stock_symbol, progress_bar, progress_value):
+def update_model_and_predict(stock_symbol):
     st.write(f"Fetching historical data for {stock_symbol}...")
     data = get_historical_data(stock_symbol)
     st.write("Historical data fetched.")
@@ -134,7 +135,6 @@ def update_model_and_predict(stock_symbol, progress_bar, progress_value):
     decision = make_investment_decision(sentiments, data['Prediction'], stock_symbol)
     st.write(f"Investment Decision: {decision}")
 
-    progress_bar.progress(progress_value + 1)
     return decision
 
 
@@ -178,6 +178,7 @@ for symbol in list(st.session_state.used_stock_symbols.keys()):
 def run_analysis_for_all_stocks():
     total_stocks = len(st.session_state.used_stock_symbols)
     progress_bar = st.progress(0)
+    progress_increment = 100 / total_stocks
 
     def update_progress(futures):
         completed = 0
@@ -199,11 +200,11 @@ def run_analysis_for_all_stocks():
                 st.session_state.used_stock_symbols[symbol]['error'] = str(e)
                 st.error(f"Error processing {symbol}: {e}")
             completed += 1
-            progress_bar.progress(completed / total_stocks)
+            progress_bar.progress(min(completed * progress_increment, 100))
 
     with concurrent.futures.ThreadPoolExecutor() as executor:
-        futures = {executor.submit(update_model_and_predict, symbol, progress_bar, idx): symbol for idx, symbol in
-                   enumerate(st.session_state.used_stock_symbols.keys())}
+        futures = {executor.submit(update_model_and_predict, symbol): symbol for symbol in
+                   st.session_state.used_stock_symbols.keys()}
         update_progress(futures)
 
 
@@ -219,10 +220,5 @@ for symbol, details in st.session_state.used_stock_symbols.items():
         if details['status'] == 'completed':
             st.write(f"Decision: {details['decision']}")
         elif details['status'] == 'failed':
-            st.write(f"Error: {details['error']}")
-        else:
-            st.write("Status: Pending")
-
-        # Display portfolio information
-        if symbol in st.session_state.portfolio:
-            st.write(f"Shares owned: {st.session_state.portfolio[symbol]}")
+            st.write(
+                f"ErrorThe error Thread 'ThreadPoolExecutor-1_0': missing ScriptRunContext` typically occurs because Streamlit does not support accessing its context from multiple threads directly. To work around this, you can update the progress in a way that is compatible with Streamlit’s single-threaded execution model.")
