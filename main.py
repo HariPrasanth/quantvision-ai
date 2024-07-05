@@ -40,13 +40,13 @@ def get_historical_data(stock_symbol):
 # Function to get news query using OpenAI GPT-4
 def get_news_query(stock_symbol):
     response = openai.ChatCompletion.create(
-        model="gpt-4",
+        model="gpt-4o",
         messages=[
             {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": f"Generate a news query for stock symbol: {stock_symbol}"}
         ]
     )
-    query = response.choices[0]['message']['content'].strip()
+    query = response['choices'][0]['message']['content'].strip()
     return query
 
 
@@ -152,22 +152,40 @@ def update_model_and_predict(stock_symbol):
     return decision
 
 
+# Initialize session state for storing used stock symbols
+if 'used_stock_symbols' not in st.session_state:
+    st.session_state.used_stock_symbols = []
+
 # Streamlit UI
 st.title("QuantVision.ai - AI-Powered Investment Strategy")
 
-# Add a sidebar to enter the stock symbol
-stock_symbol = st.sidebar.text_input("Enter Stock Symbol:", value="RELIANCE")
+# Input for stock symbol
+stock_symbol = st.text_input("Enter Stock Symbol:")
 
-# Display the initial decision when the app loads
-if stock_symbol:
-    st.write(f"Fetching initial decision for {stock_symbol}...")
-    initial_decision = update_model_and_predict(stock_symbol)
-    st.write(f"Initial Investment Decision for {stock_symbol}: {initial_decision}")
+# Button to add stock symbol to the list
+if st.button("Add Stock Symbol"):
+    if stock_symbol and stock_symbol not in st.session_state.used_stock_symbols:
+        st.session_state.used_stock_symbols.append(stock_symbol)
+        st.write(f"Added {stock_symbol} to the list.")
+    else:
+        st.write(f"{stock_symbol} is already in the list or invalid input.")
+
+# Display stored stock symbols
+st.write("Stored Stock Symbols:")
+st.write(st.session_state.used_stock_symbols)
+
+# Display the initial decision for each stored stock symbol when the app loads
+if st.session_state.used_stock_symbols:
+    for symbol in st.session_state.used_stock_symbols:
+        st.write(f"Fetching initial decision for {symbol}...")
+        initial_decision = update_model_and_predict(symbol)
+        st.write(f"Initial Investment Decision for {symbol}: {initial_decision}")
 
 # Button to manually update and make decision
 if st.button("Update and Make Decision"):
-    decision = update_model_and_predict(stock_symbol)
-    st.write(f"Investment Decision: {decision}")
+    for symbol in st.session_state.used_stock_symbols:
+        decision = update_model_and_predict(symbol)
+        st.write(f"Investment Decision for {symbol}: {decision}")
 
 
 # Schedule the update_model_and_predict function to run at 6 AM IST every day
@@ -177,7 +195,8 @@ def schedule_daily_update():
     scheduled_time = datetime.now(ist).replace(hour=6, minute=0, second=0, microsecond=0)
     if datetime.now(ist) > scheduled_time:
         scheduled_time += timedelta(days=1)
-    scheduler.add_job(update_model_and_predict, 'interval', days=1, start_date=scheduled_time, args=[stock_symbol])
+    for symbol in st.session_state.used_stock_symbols:
+        scheduler.add_job(update_model_and_predict, 'interval', days=1, start_date=scheduled_time, args=[symbol])
     scheduler.start()
 
 
