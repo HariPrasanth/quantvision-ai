@@ -10,7 +10,6 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
 from dotenv import load_dotenv
 import os
-import openai
 import joblib
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime, timedelta
@@ -20,9 +19,9 @@ import pytz
 load_dotenv()
 
 NEWS_API_KEY = os.getenv('NEWS_API_KEY')
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+# OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
-openai.api_key = OPENAI_API_KEY
+# openai.api_key = OPENAI_API_KEY
 
 MODEL_DIR = 'models'
 
@@ -37,16 +36,17 @@ def get_historical_data(stock_symbol):
     return data
 
 
-# Function to get news query using OpenAI GPT-4o
+# Function to get news query by appending the word "stock"
 def get_news_query(stock_symbol):
-    response = openai.ChatCompletion.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": f"Generate a news query for stock symbol: {stock_symbol}"}
-        ]
-    )
-    query = response.choices[0]['message']['content'].strip()
+    # response = openai.ChatCompletion.create(
+    #     model="gpt-4o",
+    #     messages=[
+    #         {"role": "system", "content": "You are a helpful assistant."},
+    #         {"role": "user", "content": f"Generate a news query for stock symbol: {stock_symbol}"}
+    #     ]
+    # )
+    # query = response.choices[0]['message']['content'].strip()
+    query = f"stock {stock_symbol}"
     return query
 
 
@@ -128,7 +128,7 @@ def update_model_and_predict(stock_symbol):
     st.write("Historical data fetched.")
     st.write(data)  # Display historical data
 
-    st.write("Generating news query using OpenAI GPT-4o...")
+    st.write("Generating news query...")
     news_query = get_news_query(stock_symbol)
     st.write(f"News query generated: {news_query}")
 
