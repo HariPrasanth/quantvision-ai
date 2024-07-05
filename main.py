@@ -177,11 +177,17 @@ if st.sidebar.button("Add Stock Symbol"):
     else:
         st.sidebar.error(f"{stock_symbol} is already in the list or invalid input.")
 
-# Display stored stock symbols and provide an option to restart the process
+# Display stored stock symbols and provide options to restart or delete the process
 st.sidebar.header("Stored Stock Symbols")
 for symbol in list(st.session_state.used_stock_symbols.keys()):
-    if st.sidebar.button(f"Restart Process for {symbol}"):
-        st.session_state.used_stock_symbols[symbol]['status'] = 'new'
+    col1, col2 = st.sidebar.columns([3, 1])
+    with col1:
+        if st.sidebar.button(f"Restart {symbol}"):
+            st.session_state.used_stock_symbols[symbol]['status'] = 'new'
+    with col2:
+        if st.sidebar.button(f"Delete {symbol}"):
+            del st.session_state.used_stock_symbols[symbol]
+            st.experimental_rerun()
 
 
 # Function to run analysis for all stocks sequentially with progress tracking
