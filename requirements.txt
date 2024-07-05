@@ -13,3 +13,4 @@ seaborn
 vaderSentiment
 python-dotenv
 tensorflow
+tf-keras
