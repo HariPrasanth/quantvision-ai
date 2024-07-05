@@ -40,7 +40,7 @@ def get_historical_data(stock_symbol):
 # Function to get news query using OpenAI GPT-4
 def get_news_query(stock_symbol):
     response = openai.ChatCompletion.create(
-        model="gpt-4o",
+        model="gpt-4",
         messages=[
             {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": f"Generate a news query for stock symbol: {stock_symbol}"}
@@ -54,15 +54,18 @@ def get_news_query(stock_symbol):
 def get_news(api_key, query):
     url = f'https://newsapi.org/v2/everything?q={query}&apiKey={api_key}'
     response = requests.get(url)
-    news_data = response.json()
-    return news_data
+    if response.status_code == 200:
+        news_data = response.json()
+        if 'articles' in news_data:
+            return news_data['articles']
+    return []
 
 
 # Function to analyze sentiment using transformers
-def analyze_sentiment_transformers(news_data):
+def analyze_sentiment_transformers(articles):
     sentiment_analysis = pipeline('sentiment-analysis')
     sentiments = [{'title': article['title'], 'sentiment': sentiment_analysis(article['title'])[0]} for article in
-                  news_data['articles']]
+                  articles]
     return sentiments
 
 
@@ -130,8 +133,8 @@ def update_model_and_predict(stock_symbol):
     st.write(f"News query generated: {news_query}")
 
     st.write("Fetching news and analyzing sentiment...")
-    news_data = get_news(NEWS_API_KEY, news_query)
-    sentiments = analyze_sentiment_transformers(news_data)
+    articles = get_news(NEWS_API_KEY, news_query)
+    sentiments = analyze_sentiment_transformers(articles)
     st.write("Sentiment analysis completed.")
 
     # Displaying number of news articles and their sentiments
