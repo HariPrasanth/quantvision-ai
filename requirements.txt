@@ -11,3 +11,4 @@ statsmodels
 matplotlib
 seaborn
 vaderSentiment
+python-dotenv

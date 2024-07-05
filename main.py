@@ -9,6 +9,13 @@ import xgboost as xgb
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+from dotenv import load_dotenv
+import os
+
+# Load environment variables
+load_dotenv()
+
+NEWS_API_KEY = os.getenv('NEWS_API_KEY')
 
 
 # Function to get historical data
@@ -32,13 +39,6 @@ def analyze_sentiment_transformers(news_data):
     return sentiments
 
 
-# Function to analyze sentiment using VADER
-def analyze_sentiment_vader(news_data):
-    analyzer = SentimentIntensityAnalyzer()
-    sentiments = [analyzer.polarity_scores(article['title']) for article in news_data['articles']]
-    return sentiments
-
-
 # Function to train an XGBoost model
 def train_xgboost_model(data):
     data['Return'] = data['Close'].pct_change()
@@ -55,8 +55,8 @@ def train_xgboost_model(data):
 
 # Function to make investment decision
 def make_investment_decision(sentiments, predictions, threshold=0.5):
-    positive_count = sum(1 for sentiment in sentiments if sentiment['compound'] > 0.05)
-    negative_count = sum(1 for sentiment in sentiments if sentiment['compound'] < -0.05)
+    positive_count = sum(1 for sentiment in sentiments if sentiment['label'] == 'positive')
+    negative_count = sum(1 for sentiment in sentiments if sentiment['label'] == 'negative')
 
     if predictions[-1] > threshold and positive_count > negative_count:
         return "BUY"
@@ -91,29 +91,21 @@ if st.button("Get Data"):
     data = get_historical_data(stock_symbol)
     st.write(data)
 
-api_key = st.text_input("Enter News API Key:")
-if st.button("Get News"):
-    news_data = get_news(api_key, stock_symbol)
+if st.button("Get News and Analyze Sentiment"):
+    news_data = get_news(NEWS_API_KEY, stock_symbol)
     st.write(news_data)
-
-if st.button("Analyze Sentiment"):
-    sentiment_method = st.selectbox("Choose Sentiment Analysis Method", ["Transformers", "VADER"])
-    if sentiment_method == "Transformers":
-        sentiments = analyze_sentiment_transformers(news_data)
-    else:
-        sentiments = analyze_sentiment_vader(news_data)
+    sentiments = analyze_sentiment_transformers(news_data)
     st.write(sentiments)
 
-if st.button("Make Decision"):
-    data = get_historical_data(stock_symbol)
-    model, rmse = train_xgboost_model(data)
-    st.write(f"Model RMSE: {rmse}")
-    data['Prediction'] = model.predict(data[['Open', 'High', 'Low', 'Volume']])
-    decision = make_investment_decision(sentiments, data['Prediction'])
-    st.write(f"Decision: {decision}")
+    if st.button("Make Decision"):
+        model, rmse = train_xgboost_model(data)
+        st.write(f"Model RMSE: {rmse}")
+        data['Prediction'] = model.predict(data[['Open', 'High', 'Low', 'Volume']])
+        decision = make_investment_decision(sentiments, data['Prediction'])
+        st.write(f"Decision: {decision}")
 
-    if decision in ["BUY", "SELL", "HOLD"]:
-        zerodha_api_key = st.text_input("Enter Zerodha API Key:")
-        zerodha_api_secret = st.text_input("Enter Zerodha API Secret:")
-        zerodha_access_token = st.text_input("Enter Zerodha Access Token:")
-        place_order(zerodha_api_key, zerodha_api_secret, zerodha_access_token, stock_symbol, decision)
+        if decision in ["BUY", "SELL", "HOLD"]:
+            zerodha_api_key = st.text_input("Enter Zerodha API Key:")
+            zerodha_api_secret = st.text_input("Enter Zerodha API Secret:")
+            zerodha_access_token = st.text_input("Enter Zerodha Access Token:")
+            place_order(zerodha_api_key, zerodha_api_secret, zerodha_access_token, stock_symbol, decision)
