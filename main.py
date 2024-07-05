@@ -37,16 +37,16 @@ def get_historical_data(stock_symbol):
     return data
 
 
-# Function to get news query using OpenAI GPT-4
+# Function to get news query using OpenAI GPT-4o
 def get_news_query(stock_symbol):
     response = openai.ChatCompletion.create(
-        model="gpt-4",
+        model="gpt-4o",
         messages=[
             {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": f"Generate a news query for stock symbol: {stock_symbol}"}
         ]
     )
-    query = response['choices'][0]['message']['content'].strip()
+    query = response.choices[0]['message']['content'].strip()
     return query
 
 
@@ -128,20 +128,26 @@ def update_model_and_predict(stock_symbol):
     st.write("Historical data fetched.")
     st.write(data)  # Display historical data
 
-    st.write("Generating news query using OpenAI GPT-4...")
+    st.write("Generating news query using OpenAI GPT-4o...")
     news_query = get_news_query(stock_symbol)
     st.write(f"News query generated: {news_query}")
 
-    st.write("Fetching news and analyzing sentiment...")
+    st.write("Fetching news...")
     articles = get_news(NEWS_API_KEY, news_query)
-    sentiments = analyze_sentiment_transformers(articles)
-    st.write("Sentiment analysis completed.")
+    st.write(f"Number of news articles received: {len(articles)}")
 
-    # Displaying number of news articles and their sentiments
-    st.write(f"Number of news articles received: {len(sentiments)}")
-    sentiment_df = pd.DataFrame(sentiments)
-    st.write("Sentiment results:")
-    st.write(sentiment_df)
+    if articles:
+        st.write("Analyzing sentiment of news articles...")
+        sentiments = analyze_sentiment_transformers(articles)
+        st.write("Sentiment analysis completed.")
+
+        # Displaying number of news articles and their sentiments
+        sentiment_df = pd.DataFrame(sentiments)
+        st.write("Sentiment results:")
+        st.write(sentiment_df)
+    else:
+        st.write("No news articles received to analyze.")
+        sentiments = []
 
     st.write("Training or updating model...")
     model, rmse = train_xgboost_model(data, stock_symbol, update=True)
